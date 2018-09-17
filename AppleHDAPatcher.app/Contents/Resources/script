@@ -1,0 +1,99 @@
+#!/usr/bin/perl
+# 
+# Maintained by: Mirone (c) 2014-2018
+# 
+# Credits: Oldnapalm,bcc9
+# 
+
+$dir = $ARGV[0];
+if(!$dir) {
+	
+	print"\t\t\t           AppleHDAPatcher - v1.4\n";
+	print"\t\t\t  Drag codec folder on window to process it \n\n\n\n";
+	print"------------------------------------------------------------------------\n\n";
+	
+	system("./ListCodec.command\n");
+}
+
+foreach $dir(@ARGV) {
+	
+	$dircmd = $dir;
+	$dircmd =~ s/ /\\ /g;
+	$codec = substr($dir, rindex($dir, '/')+1);
+	$codec =~ s/ /_/g;
+	$version = qx!./PlistBuddy -c \"Print :CFBundleVersion\" ./AppleHDA.kext/Contents/Info.plist!;
+	chomp $version;
+	$version =~ s/ /_/g;
+	$name = "AppleHDA-".$version."-".$codec;
+	$basepath = "~/Desktop/".$name;
+	system("mkdir ".$basepath);
+	print "Copying kext\n";
+	system("cp -R ./AppleHDA.kext ".$basepath);
+	print "Copying zlib files\n";
+	system("cp ".$dircmd."/*.zlib ".$basepath."/AppleHDA.kext/Contents/Resources");
+	if(opendir(DIR, $dir)) {
+		$i = 0;
+		foreach $file (readdir(DIR)) {
+			if ($file =~ /^hdaconfig/) {
+				open(HDACONFIG, $dir."/".$file) or print "WARNING: could not read $file\n";
+				$plist = $basepath."/AppleHDA.kext/Contents/Plugins/AppleHDAHardwareConfigDriver.kext/Contents/Info.plist";
+				system("./PlistBuddy -c \"Add :IOKitPersonalities:HDA\\ Hardware\\ Config\\ Resource:HDAConfigDefault:$i dict\" $plist");
+				while(<HDACONFIG>) {
+					chomp;
+					$line = $_;
+					if($line =~ /\s*(\w+)\s*=\s*<([^>]+)>/) {
+						$key = $1;
+						$buf = $2;
+						&bingen($buf);
+						print "Adding data entry ".$key." to plist\n";
+						system("./PlistBuddy -c \"Import :IOKitPersonalities:HDA\\ Hardware\\ Config\\ Resource:HDAConfigDefault:$i:$key tmp.bin\" $plist");
+					} elsif($line =~ /\s*(\w+)\s*=\s*(\d+);/) {
+						$key = $1;
+						$buf = $2;
+						print "Adding integer entry ".$key." to plist\n";
+						system("./PlistBuddy -c \"Add :IOKitPersonalities:HDA\\ Hardware\\ Config\\ Resource:HDAConfigDefault:$i:$key integer $buf\" $plist");
+					} elsif($line =~ /\s*(\w+)\s*=\s*\"([^\"]+)\";/) {
+						$key = $1;
+						$buf = $2;
+						print "Adding string entry ".$key." to plist\n";
+						system("./PlistBuddy -c \"Add :IOKitPersonalities:HDA\\ Hardware\\ Config\\ Resource:HDAConfigDefault:$i:$key string $buf\" $plist");
+					}
+				}
+				close(HDACONFIG);
+				$i++;
+			}
+		}
+	}
+	else {
+		print "WARNING: invalid folder\n";
+	}
+	closedir(DIR);
+	open(BINPATCH, $dir."/binpatch.txt") or print "Binary patch not found\n";
+	while(<BINPATCH>) {
+		chomp;
+		if($_) {
+			system("./patch-hda.pl -s ".$basepath." ".$_);
+			last;
+		}
+	}
+	close(BINPATCH);
+	print "Copying README file\n";
+	system("cp ".$dircmd."/README* ".$basepath);
+	print "Creating zip file\n";
+	system("cd ~/Desktop && zip -r ".$name.".zip ".$name.">/dev/null");
+	system("rm -r ".$basepath);
+	print "Done.\n\n";
+	print"------------------------------------------------------------------------\n\n";
+	print "Donate: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=K4M7MJFLXUU6Y\n";
+	
+	
+}
+sub bingen {
+	$string = shift;
+	$string =~ s/\s//g;
+	my @bytes  = map { pack('C', hex($_)) } ($string =~ /(..)/g);
+	open(BIN, ">tmp.bin");
+	binmode BIN;
+	print BIN join("", @bytes);
+	close(BIN);
+}
