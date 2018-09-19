@@ -8,11 +8,21 @@
     `LayoutID`: 3
 
 2. Platforms.xml.zlib
+
 3. LayoutXX.xml.zlib (XX为ConfigData中的layoutID)
+
 4. patch AppleHDA
     binpatch 或 Clover/config.plist/`KextsToPatch`
+
 5. patch DSDT
     DTGP + `HDEF`'s _DSM
+
+    __Hotpatch method__: 
+
+    ​	a. Clover/config.plist/Fixes/`AddDTGP_0001` = Yes.
+
+    ​	b.` SSDT-HDEF.aml` in Clover/ACPI/patched.
+
 6. IRQ fix(laptop)
     Clover/config.plist
 ## post patch:
